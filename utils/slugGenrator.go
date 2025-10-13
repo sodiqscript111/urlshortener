@@ -7,8 +7,6 @@ import (
 
 const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// CryptoRandomString returns a securely generated random string of length n.
-// Good for slugs, tokens, IDs where predictability must be avoided.
 func CryptoRandomString(n int) (string, error) {
 	if n <= 0 {
 		return "", nil

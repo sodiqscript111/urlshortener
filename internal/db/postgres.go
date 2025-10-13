@@ -12,7 +12,7 @@ func ConnectDB() (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := database.AutoMigrate(&models.Link{}); err != nil {
+	if err := database.AutoMigrate(&models.Link{}, &models.ClickOutbox{}); err != nil {
 		return nil, err
 	}
 	return database, nil
