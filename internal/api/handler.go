@@ -36,7 +36,7 @@ type RedisCache struct {
 	client *redis.Client
 	config CacheConfig
 	group  singleflight.Group
-	db     *gorm.DB
+	Db     *gorm.DB
 }
 
 type CacheRepository interface {
@@ -125,7 +125,7 @@ func (c *RedisCache) refresh(ctx context.Context, key string, staleURL string) (
 		}
 
 		var link models.Link
-		if err := c.db.Where("short_code = ?", key[5:]).First(&link).Error; err != nil {
+		if err := c.Db.Where("short_code = ?", key[5:]).First(&link).Error; err != nil {
 			log.Println("DB miss:", key, err)
 			if staleURL != "" {
 				return staleURL, nil
@@ -166,7 +166,7 @@ func (c *RedisCache) IncrClicks(ctx context.Context, key string) error {
 func (c *RedisCache) OutboxWorker(ctx context.Context) {
 	for {
 		var outbox []models.ClickOutbox
-		if err := c.db.Where("processed = ?", false).Find(&outbox).Error; err != nil {
+		if err := c.Db.Where("processed = ?", false).Find(&outbox).Error; err != nil {
 			log.Println("Outbox fetch error:", err)
 			time.Sleep(time.Second)
 			continue
@@ -176,12 +176,12 @@ func (c *RedisCache) OutboxWorker(ctx context.Context) {
 				log.Println("Outbox Redis update failed:", err)
 				continue
 			}
-			if err := c.db.Model(&models.Link{}).Where("short_code = ?", entry.ShortCode).
+			if err := c.Db.Model(&models.Link{}).Where("short_code = ?", entry.ShortCode).
 				Update("clicks", gorm.Expr("clicks + ?", entry.ClickCount)).Error; err != nil {
 				log.Println("Outbox DB update failed:", err)
 				continue
 			}
-			c.db.Model(&entry).Update("processed", true)
+			c.Db.Model(&entry).Update("processed", true)
 			log.Println("Outbox processed:", entry.ShortCode)
 		}
 		time.Sleep(time.Second)
@@ -233,14 +233,8 @@ func HandleUserLink(c *gin.Context, db *gorm.DB, redisClient *redis.Client) {
 	c.JSON(http.StatusOK, gin.H{"short_url": baseURL + code})
 }
 
-func HandleRedirect(c *gin.Context, db *gorm.DB, redisClient *redis.Client) {
+func HandleRedirect(c *gin.Context, db *gorm.DB, cache CacheRepository) {
 	code := c.Param("code")
-	cache := NewRedisCache(redisClient, CacheConfig{
-		FreshTTL: 5 * time.Second,
-		StaleTTL: 10 * time.Second,
-		Beta:     0.8,
-	})
-	cache.db = db
 
 	url, err := cache.Get(ctx, "slug:"+code)
 	if err != nil {
@@ -269,6 +263,6 @@ func HandleRedirect(c *gin.Context, db *gorm.DB, redisClient *redis.Client) {
 
 func StartOutboxWorker(db *gorm.DB, redisClient *redis.Client) {
 	cache := NewRedisCache(redisClient, CacheConfig{})
-	cache.db = db
+	cache.Db = db
 	go cache.OutboxWorker(ctx)
 }
