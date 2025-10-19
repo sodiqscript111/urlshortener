@@ -39,6 +39,12 @@ type RedisCache struct {
 	db     *gorm.DB
 }
 
+type CacheRepository interface {
+	Set(ctx context.Context, key string, url string) error
+	Get(ctx context.Context, key string) (string, error)
+	IncrClicks(ctx context.Context, key string) error
+}
+
 func NewRedisCache(client *redis.Client, config CacheConfig) *RedisCache {
 	return &RedisCache{
 		client: client,

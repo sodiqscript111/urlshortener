@@ -27,5 +27,6 @@ func main() {
 
 	router.POST("/shorten", func(c *gin.Context) { api.HandleUserLink(c, dbConn, db.RedisClient) })
 	router.GET("/:code", func(c *gin.Context) { api.HandleRedirect(c, dbConn, db.RedisClient) })
+
 	router.Run(":8080")
 }
