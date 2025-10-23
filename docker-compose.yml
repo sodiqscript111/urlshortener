@@ -6,14 +6,12 @@ services:
       - "8080:8080"
     depends_on:
       - db
-    environment:
-      - POSTGRES_HOST=db
+    env_file:
+      - .env
   db:
     image: postgres:13
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=testing
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
 volumes:
