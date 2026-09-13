@@ -1,3 +1,4 @@
 *.exe
 .env
 results.bin
+report.html

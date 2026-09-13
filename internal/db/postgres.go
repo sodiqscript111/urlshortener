@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -29,8 +30,17 @@ func ConnectDB() (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := database.AutoMigrate(&models.Link{}, &models.ClickOutbox{}); err != nil {
+	if err := database.AutoMigrate(&models.Link{}); err != nil {
 		return nil, err
 	}
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(50)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
 	return database, nil
 }

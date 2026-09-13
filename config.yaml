@@ -1,0 +1,11 @@
+duration: 20s
+bucket_width: 1s
+ramp: 3s
+concurrency: 800
+
+# --- Pure HTTP Application Load Test ---
+http:
+  rate: 5000
+  target:
+    method: GET
+    url: http://localhost:8080/kDbifN3s7Q

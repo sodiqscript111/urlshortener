@@ -1,0 +1,44 @@
+duration: 30s
+bucket_width: 1s
+ramp: 5s
+concurrency: 50
+
+# --- User Journey Scenario Mode ---
+scenario:
+  - name: shorten-and-redirect
+    weight: 1
+    steps:
+      - method: POST
+        url: http://localhost:8080/shorten
+        body: '{"url":"https://example.com/test"}'
+        headers:
+          Content-Type: application/json
+        extract:
+          short_url: $.short_url
+      - method: GET
+        url: '{{short_url}}'
+
+# --- Database Layer (PostgreSQL Runner) ---
+db:
+  rate: 100
+  target:
+    driver: postgres
+    conn: postgres://postgres:password@localhost:5432/testing?sslmode=disable
+    queries:
+      - query: SELECT id, original_url, short_code, clicks FROM links LIMIT 10
+        weight: 60
+        type: read
+      - query: SELECT count(*) FROM links
+        weight: 40
+        type: read
+
+# --- Cache Layer (Redis Runner) ---
+redis:
+  rate: 500
+  target:
+    addr: localhost:6379
+    password: ""
+    db: 0
+    queries:
+      - query: PING
+        weight: 100

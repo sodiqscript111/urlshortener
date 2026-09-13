@@ -10,10 +10,12 @@ var RedisClient *redis.Client
 
 func InitRedis() {
 	RedisClient = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-		Protocol: 2,
+		Addr:         "localhost:6379",
+		Password:     "",
+		DB:           0,
+		Protocol:     2,
+		PoolSize:     300,
+		MinIdleConns: 50,
 	})
 
 	_, err := RedisClient.Ping(context.Background()).Result()
