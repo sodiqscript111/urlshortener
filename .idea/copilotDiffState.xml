@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/internal/db/postgres.go">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/internal/db/postgres.go" />
+              <option name="originalContent" value="package db&#10;&#10;import (&#10;&#9;&quot;gorm.io/driver/postgres&quot;&#10;&#9;&quot;gorm.io/gorm&quot;&#10;&#9;&quot;urlshorter/models&quot;&#10;)&#10;&#10;func ConnectDB() (*gorm.DB, error) {&#10;&#9;dsn := &quot;host=localhost user=postgres password=password dbname=testing sslmode=disable&quot;&#10;&#9;database, err := gorm.Open(postgres.Open(dsn), &amp;gorm.Config{})&#10;&#9;if err != nil {&#10;&#9;&#9;return nil, err&#10;&#9;}&#10;&#9;if err := database.AutoMigrate(&amp;models.Link{}, &amp;models.ClickOutbox{}); err != nil {&#10;&#9;&#9;return nil, err&#10;&#9;}&#10;&#9;return database, nil&#10;}&#10;" />
+              <option name="updatedContent" value="package db&#10;&#10;import (&#10;&#9;&quot;fmt&quot;&#10;&#9;&quot;os&quot;&#10;&#10;&#9;&quot;gorm.io/driver/postgres&quot;&#10;&#9;&quot;gorm.io/gorm&quot;&#10;&#9;&quot;urlshorter/models&quot;&#10;)&#10;&#10;func getEnv(key, fallback string) string {&#10;&#9;if v := os.Getenv(key); v != &quot;&quot; {&#10;&#9;&#9;return v&#10;&#9;}&#10;&#9;return fallback&#10;}&#10;&#10;func ConnectDB() (*gorm.DB, error) {&#10;&#9;// Read DB config from environment variables (preferred) with sane defaults for local dev&#10;&#9;host := getEnv(&quot;DB_HOST&quot;, &quot;localhost&quot;)&#10;&#9;user := getEnv(&quot;DB_USER&quot;, &quot;postgres&quot;)&#10;&#9;password := getEnv(&quot;DB_PASSWORD&quot;, &quot;password&quot;)&#10;&#9;dbname := getEnv(&quot;DB_NAME&quot;, &quot;testing&quot;)&#10;&#9;sslmode := getEnv(&quot;DB_SSLMODE&quot;, &quot;disable&quot;)&#10;&#10;&#9;dsn := fmt.Sprintf(&quot;host=%s user=%s password=%s dbname=%s sslmode=%s&quot;, host, user, password, dbname, sslmode)&#10;&#9;database, err := gorm.Open(postgres.Open(dsn), &amp;gorm.Config{})&#10;&#9;if err != nil {&#10;&#9;&#9;return nil, err&#10;&#9;}&#10;&#9;if err := database.AutoMigrate(&amp;models.Link{}, &amp;models.ClickOutbox{}); err != nil {&#10;&#9;&#9;return nil, err&#10;&#9;}&#10;&#9;return database, nil&#10;}" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

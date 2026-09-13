@@ -125,8 +125,11 @@ func (c *RedisCache) refresh(ctx context.Context, key string, staleURL string) (
 		}
 
 		var link models.Link
-		if err := c.Db.Where("short_code = ?", key[5:]).First(&link).Error; err != nil {
-			log.Println("DB miss:", key, err)
+		_, err = DBCircuitBreaker.Execute(func() (interface{}, error) {
+			return nil, c.Db.Where("short_code = ?", key[5:]).First(&link).Error
+		})
+		if err != nil {
+			log.Println("DB miss or circuit open:", key, err)
 			if staleURL != "" {
 				return staleURL, nil
 			}
@@ -217,9 +220,12 @@ func HandleUserLink(c *gin.Context, db *gorm.DB, redisClient *redis.Client) {
 		ShortCode:   code,
 		Clicks:      0,
 	}
-	if err := db.Create(&saveLink).Error; err != nil {
+	_, err = DBCircuitBreaker.Execute(func() (interface{}, error) {
+		return nil, db.Create(&saveLink).Error
+	})
+	if err != nil {
 		log.Println("Failed to save link to DB:", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save URL: " + err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to save URL: " + err.Error()})
 		return
 	}
 
@@ -243,12 +249,15 @@ func HandleRedirect(c *gin.Context, db *gorm.DB, cache CacheRepository) {
 		return
 	}
 
-	if err := db.Create(&models.ClickOutbox{
-		ShortCode:  code,
-		ClickCount: 1,
-		Processed:  false,
-	}).Error; err != nil {
-		log.Println("Failed to log click to outbox:", err)
+	_, outboxErr := DBCircuitBreaker.Execute(func() (interface{}, error) {
+		return nil, db.Create(&models.ClickOutbox{
+			ShortCode:  code,
+			ClickCount: 1,
+			Processed:  false,
+		}).Error
+	})
+	if outboxErr != nil {
+		log.Println("Failed to log click to outbox:", outboxErr)
 	} else {
 		log.Println("Click logged to outbox:", code)
 	}
