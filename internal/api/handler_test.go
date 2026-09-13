@@ -21,13 +21,15 @@ import (
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"urlshorter/internal/repository"
 	"urlshorter/models"
+	"urlshorter/services"
 )
 
 var (
 	testDB          *gorm.DB
 	testRedisClient *redis.Client
-	testCache       *RedisCache
+	testL1Cache     *BoundedL1Cache
 	testRouter      *gin.Engine
 )
 
@@ -95,27 +97,28 @@ func TestMain(m *testing.M) {
 	testRedisClient = redis.NewClient(redisOpts)
 	InitBreakers()
 
-	testCache = NewRedisCache(testRedisClient, CacheConfig{
-		FreshTTL: 10 * time.Minute,
-		StaleTTL: 30 * time.Minute,
-	})
-	testCache.Db = testDB
+	linkRepo := repository.NewPostgresLinkRepository(testDB)
+	cacheRepo := repository.NewRedisCacheRepository(testRedisClient)
+	testL1Cache = NewBoundedL1Cache(50000)
 
-	outboxCtx, cancelOutbox := context.WithCancel(ctx)
-	go testCache.OutboxWorker(outboxCtx)
+	linkService := services.NewLinkService(linkRepo, cacheRepo, testL1Cache)
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	linkService.StartWorkers(workerCtx)
+
+	handler := NewLinkHandler(linkService, testDB, testRedisClient)
 
 	gin.SetMode(gin.TestMode)
 	testRouter = gin.New()
 	testRouter.Use(gin.Recovery())
 
-	testRouter.GET("/target", func(c *gin.Context) { c.String(http.StatusOK, "OK") })
-	testRouter.GET("/health", func(c *gin.Context) { HandleHealthCheck(c, testDB, testRedisClient) })
-	testRouter.POST("/shorten", func(c *gin.Context) { HandleUserLink(c, testDB, testRedisClient) })
-	testRouter.GET("/:code", func(c *gin.Context) { HandleRedirect(c, testDB, testCache) })
+	testRouter.GET("/target", handler.Target)
+	testRouter.GET("/health", handler.HealthCheck)
+	testRouter.POST("/shorten", handler.Shorten)
+	testRouter.GET("/:code", handler.Redirect)
 
 	code := m.Run()
 
-	cancelOutbox()
+	cancelWorkers()
 	_ = testRedisClient.Close()
 	sqlDB, _ := testDB.DB()
 	if sqlDB != nil {
@@ -174,11 +177,11 @@ func TestShortenAndRedirect(t *testing.T) {
 	assert.Equal(t, http.StatusFound, wRedirect.Code)
 	assert.Equal(t, targetURL, wRedirect.Header().Get("Location"))
 
-	cachedURL, found := l1Cache.Get("slug:" + shortCode)
+	cachedURL, found := testL1Cache.Get("slug:" + shortCode)
 	assert.True(t, found)
 	assert.Equal(t, targetURL, cachedURL)
 
-	redisCached, err := testCache.client.Get(context.Background(), "slug:"+shortCode).Result()
+	redisCached, err := testRedisClient.Get(context.Background(), "slug:"+shortCode).Result()
 	assert.NoError(t, err)
 	assert.Contains(t, redisCached, targetURL)
 
@@ -212,9 +215,9 @@ func TestCacheFallbackToDatabase(t *testing.T) {
 	}).Error
 	require.NoError(t, err)
 
-	l1Cache.mu.Lock()
-	delete(l1Cache.items, "slug:"+fallbackCode)
-	l1Cache.mu.Unlock()
+	testL1Cache.mu.Lock()
+	delete(testL1Cache.items, "slug:"+fallbackCode)
+	testL1Cache.mu.Unlock()
 	_ = testRedisClient.Del(context.Background(), "slug:"+fallbackCode).Err()
 
 	req, _ := http.NewRequest(http.MethodGet, "/"+fallbackCode, nil)
@@ -224,7 +227,7 @@ func TestCacheFallbackToDatabase(t *testing.T) {
 	assert.Equal(t, http.StatusFound, w.Code)
 	assert.Equal(t, fallbackURL, w.Header().Get("Location"))
 
-	recoveredURL, ok := l1Cache.Get("slug:" + fallbackCode)
+	recoveredURL, ok := testL1Cache.Get("slug:" + fallbackCode)
 	assert.True(t, ok)
 	assert.Equal(t, fallbackURL, recoveredURL)
 }

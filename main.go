@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
-	"time"
 	"urlshorter/internal/api"
 	"urlshorter/internal/db"
+	"urlshorter/internal/repository"
+	"urlshorter/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ulule/limiter/v3"
@@ -15,18 +17,22 @@ import (
 
 func main() {
 	dbConn, err := db.ConnectDB()
-	db.InitRedis()
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
+	db.InitRedis()
 
-	cache := api.NewRedisCache(db.RedisClient, api.CacheConfig{
-		FreshTTL: 10 * time.Minute,
-		StaleTTL: 30 * time.Minute,
-		Beta:     0.8,
-	})
-	cache.Db = dbConn
 	api.InitBreakers()
+
+	linkRepo := repository.NewPostgresLinkRepository(dbConn)
+	cacheRepo := repository.NewRedisCacheRepository(db.RedisClient)
+	l1Cache := api.NewBoundedL1Cache(50000)
+
+	linkService := services.NewLinkService(linkRepo, cacheRepo, l1Cache)
+	linkService.StartWorkers(context.Background())
+
+	linkHandler := api.NewLinkHandler(linkService, dbConn, db.RedisClient)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -51,12 +57,10 @@ func main() {
 		router.Use(middleware)
 	}
 
-	router.GET("/target", func(c *gin.Context) { c.String(200, "OK") })
-	router.GET("/health", func(c *gin.Context) { api.HandleHealthCheck(c, dbConn, db.RedisClient) })
-	router.POST("/shorten", func(c *gin.Context) { api.HandleUserLink(c, dbConn, db.RedisClient) })
-	router.GET("/:code", func(c *gin.Context) { api.HandleRedirect(c, dbConn, cache) })
-
-	api.StartOutboxWorker(dbConn, db.RedisClient)
+	router.GET("/target", linkHandler.Target)
+	router.GET("/health", linkHandler.HealthCheck)
+	router.POST("/shorten", linkHandler.Shorten)
+	router.GET("/:code", linkHandler.Redirect)
 
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Server stopped: %v", err)
